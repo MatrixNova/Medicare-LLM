@@ -1,8 +1,7 @@
 import os
 import logging
-from dotenv import load_dotenv
-
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 # Logger Configuration
 logging.basicConfig(
@@ -11,17 +10,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# GROBID_CONFIGURATION
-GROBID_HOST = os.getenv("GROBID_HOST")
+# --- !! IMPORTANT !! ---
+# SET YOUR API KEY IN YOUR ENVIRONMENT
+# On Windows (Command Prompt): set GEMINI_API_KEY=YOUR_API_KEY_HERE
+# On Windows (PowerShell):   $env:GEMINI_API_KEY="YOUR_API_KEY_HERE"
+# On macOS/Linux:           export GEMINI_API_KEY='YOUR_API_KEY_HERE'
+# -------------------------
+
 
 # HUGGINGFACE CONFIGURATION 
-HUGGINGFACETOKEN = os.getenv("HUGGINGFACETOKEN")
+HUGGINGFACETOKEN = os.environ["HUGGINGFACETOKEN"]
+# HUGGINGFACETOKEN = os.getenv("HUGGINGFACETOKEN")
 
 # QDRANT CLOUD CONFIGURATION
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-QDRANT_ENDPOINT_URL = os.getenv("QDRANT_ENDPOINT_URL")
+QDRANT_API_KEY = os.environ["QDRANT_API_KEY"]
+QDRANT_ENDPOINT_URL = os.environ["QDRANT_ENDPOINT_URL"]
+# QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+# QDRANT_ENDPOINT_URL = os.getenv("QDRANT_ENDPOINT_URL")
 
 # GEMINI CONFIGURATION
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # WEIGHT & BIASES EVALUATION CONFIGURATION
