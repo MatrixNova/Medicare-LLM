@@ -65,7 +65,6 @@ def create_qdrant_collection(client: QdrantClient, collection_name: str, embeddi
         )
         logger.info(f"Collection '{collection_name}' created/recreated successfully.")
         
-        # --- !! THIS IS THE FIX !! ---
         # Create a payload index for "disease_name_short" to enable filtering.
         logger.info("Creating payload index for 'disease_name_short'...")
         client.create_payload_index(
@@ -109,11 +108,11 @@ def main():
     
     for metadata_file_path in metadata_files:
         try:
-            # 1. Load the structured metadata payload
+            
             with open(metadata_file_path, 'r', encoding='utf-8') as f:
                 document_payload = json.load(f) 
             
-            # 2. Find and load the corresponding raw text file
+            
             raw_text_file_path = RAW_TEXT_DIR / metadata_file_path.name
             if not raw_text_file_path.exists():
                 logger.warning(f"No matching raw text file at {raw_text_file_path} for {metadata_file_path.name}. Skipping.")

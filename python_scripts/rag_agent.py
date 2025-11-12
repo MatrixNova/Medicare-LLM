@@ -191,9 +191,9 @@ from typing import List, Dict, Any, Optional
 
 # --- Configuration ---
 EMBEDDING_MODEL_NAME = 'pritamdeka/S-BioBert-snli-multinli-stsb'
-# Using 1.5 Pro for high-quality generation
+# Using 2.5 Pro for high-quality generation
 GENERATOR_MODEL_NAME = 'gemini-2.5-pro' 
-# Using 1.5 Flash for fast, cheap filter extraction
+# Using 2.5 Flash for fast, cheap filter extraction
 FILTER_MODEL_NAME = 'gemini-2.5-flash' 
 COLLECTION_NAME = "main-rag"
 
@@ -239,9 +239,7 @@ class RAGAgent:
         logger.info("RAGAgent initialized successfully.")
 
     def extract_filters_from_query(self, query: str) -> Optional[models.Filter]:
-        """
-        Uses a fast LLM to extract potential metadata filters from the user query.
-        """
+       
         logger.info("Extracting filters from query...")
         prompt = f"""
         You are a query analysis assistant. Your job is to extract *only* the name of a disease from the user's query.
@@ -283,7 +281,7 @@ class RAGAgent:
                 return models.Filter(
                     must=[
                         models.FieldCondition(
-                            key="disease_name_short", # This is the payload key
+                            key="disease_name_short",
                             match=models.MatchValue(value=disease_name)
                         )
                     ]
@@ -349,10 +347,8 @@ class RAGAgent:
         """
         return prompt
 
-    def ask(self, query: str) -> str:
-        """
-        Main method to run the full RAG pipeline.
-        """
+    def ask(self, query: str) -> tuple[str, list[str]]:
+       
         # 1. Extract filters from query
         qdrant_filter = self.extract_filters_from_query(query)
         
@@ -370,6 +366,8 @@ class RAGAgent:
                 filters=None
             )
         
+        context_strings = [doc.get('raw_text_chunk', '') for doc in retrieved_contexts]
+
         if not retrieved_contexts:
             logger.warning("No relevant context found in the database.")
             return "I'm sorry, I could not find any relevant information in the clinical cases to answer your question."
@@ -410,21 +408,22 @@ class RAGAgent:
                 contents=[prompt],          # contents must be a list
                 config=config
             )
-            return response.text
+            return response.text, context_strings
+        
         except Exception as e:
             logger.error(f"Error during answer generation: {e}")
             logger.debug(f"Failed prompt:\n{prompt}") 
-            return f"An error occurred while generating the response: {e}"
+            return f"An error occurred while generating the response: {e}", context_strings
 
 # --- Main execution block ---
 if __name__ == "__main__":
     try:
         agent = RAGAgent()
         
-        query = "What are the symptoms for dengue fever?"
+        query = "A patient has 5-day history of fever, generalized abdominal pain, and frontal headache. What is their most likely diagnosis?"
         
         print(f"\nTesting agent with query: '{query}'\n")
-        answer = agent.ask(query)
+        answer, contexts = agent.ask(query)
         
         print("\n--- GENERATED ANSWER ---")
         print(answer)
