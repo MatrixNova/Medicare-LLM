@@ -1,181 +1,4 @@
-# from google import genai
-# from qdrant_client import QdrantClient
-# from sentence_transformers import SentenceTransformer
-# from config import (
-#     QDRANT_ENDPOINT_URL, 
-#     QDRANT_API_KEY, 
-#     HUGGINGFACETOKEN, 
-#     GEMINI_API_KEY, 
-#     logger
-# )
-# from typing import List, Dict, Any
-# 
-# # --- Configuration ---
-# # This is YOUR chosen embedding model
-# EMBEDDING_MODEL_NAME = 'pritamdeka/S-BioBert-snli-multinli-stsb'
-# 
-# # This is your generative model (the "chat agent")
-# GENERATOR_MODEL_NAME = 'gemini-2.5-pro'
-# 
-# # This is the Qdrant collection you uploaded your data to
-# COLLECTION_NAME = "main-rag"
-# 
-# class RAGAgent:
-#     def __init__(self):
-#         """
-#         Initializes the RAG agent by loading all necessary models and clients.
-#         """
-#         logger.info("Initializing RAGAgent...")
-#         
-#         # 1. Initialize Embedding Model (for querying)
-#         logger.info(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
-#         self.embed_model = SentenceTransformer(
-#             EMBEDDING_MODEL_NAME, 
-#             use_auth_token=HUGGINGFACETOKEN
-#         )
-#         logger.info("Embedding model loaded.")
-#         
-#         # 2. Initialize Qdrant Client (for retrieving)
-#         logger.info(f"Connecting to Qdrant Cloud...")
-#         if not QDRANT_ENDPOINT_URL or not QDRANT_API_KEY:
-#             raise ValueError("QDRANT_ENDPOINT_URL or QDRANT_API_KEY not found in .env file.")
-#         
-#         self.qdrant_client = QdrantClient(
-#             url=QDRANT_ENDPOINT_URL, 
-#             api_key=QDRANT_API_KEY
-#         )
-#         logger.info("Qdrant Cloud connection successful.")
-#         
-#         # 3. Initialize Generative Model (for generating)
-#         if not GEMINI_API_KEY:
-#             raise ValueError("GEMINI_API_KEY not found in .env file.")
-#             
-#         logger.info(f"Initializing generative model: {GENERATOR_MODEL_NAME}")
-#         #genai.configure(api_key=GEMINI_API_KEY)
-#         #self.gen_model = genai.GenerativeModel(GENERATOR_MODEL_NAME)
-#         self.client = genai.Client(api_key=GEMINI_API_KEY)
-#         
-#         logger.info("RAGAgent initialized successfully.")
-# 
-#     def search_knowledge_base(self, query: str, top_k: int = 40) -> List[Dict[str, Any]]:
-#         """
-#         Embeds the query and searches Qdrant for the top_k most relevant documents.
-#         """
-#         logger.info(f"Embedding query: '{query[:50]}...'")
-#         # Use your S-BioBert model to create the query vector
-#         query_vector = self.embed_model.encode(query).tolist()
-#         
-#         logger.info(f"Searching collection '{COLLECTION_NAME}' in Qdrant...")
-#         search_results = self.qdrant_client.search(
-#             collection_name=COLLECTION_NAME,
-#             query_vector=query_vector,
-#             limit=top_k,
-#             with_payload=True  # This is crucial! It returns your JSON data
-#         )
-#         
-#         # Extract just the payloads (your original JSON) from the search results
-#         retrieved_contexts = [result.payload for result in search_results]
-#         logger.info(f"Retrieved {len(retrieved_contexts)} contexts.")
-#         return retrieved_contexts
-# 
-#     def build_prompt(self, query: str, context_docs: List[Dict[str, Any]]) -> str:
-#         """
-#         Builds a comprehensive prompt for the generative model,
-#         using the structured JSON context you created.
-#         """
-#         # Convert the list of JSON payloads into a readable context string
-#         context_str = "\n\n---\n\n".join(
-#             [f"Source Document: {doc.get('source_filename', 'N/A')}\n"
-#              f"Diagnosis: {doc.get('final_diagnosis', 'N/A')}\n"
-#              f"Disease Name: {doc.get('disease_name_short', 'N/A')}\n"
-#              f"History: {doc.get('history_of_present_illness', 'N/A')}\n"
-#              f"Labs: {doc.get('labs_and_diagnostics', 'N/A')}" 
-#              for doc in context_docs]
-#         )
-#         
-#         prompt = f"""
-#         You are an expert clinical diagnostic assistant. Your task is to answer the user's question based *only* on the provided clinical case # summaries.
-#         
-#         Do not use any external knowledge. If the answer is not in the provided context, state that clearly: "I could not find an answer in the # provided case reports."
-#         
-#         **PROVIDED CONTEXT:**
-#         {context_str}
-#         
-#         **USER QUESTION:**
-#         {query}
-#         
-#         **ASSISTANT ANSWER:**
-#         """
-#         return prompt
-# 
-#     def ask(self, query: str) -> str:
-#         """
-#         Main method to run the full RAG pipeline.
-#         Query -> Embed -> Search -> Augment -> Generate
-#         """
-#         # retrieve context
-#         retrieved_contexts = self.search_knowledge_base(query)
-#         
-#         if not retrieved_contexts:
-#             logger.warning("No relevant context found in the database.")
-#             return "I'm sorry, I could not find any relevant information in the clinical cases to answer your question."
-#             
-#         # build  prompt
-#         prompt = self.build_prompt(query, retrieved_contexts)
-#         
-#         # generate the answer
-#         logger.info("Generating final answer from context...")
-#         try:
-#             # Set safety settings to be less restrictive (medical data can be sensitive)
-#             safety_settings_list = [
-#                 {
-#                     "category": "HARM_CATEGORY_HARASSMENT",
-#                     "threshold": "BLOCK_NONE"
-#                 },
-#                 {
-#                     "category": "HARM_CATEGORY_HATE_SPEECH",
-#                     "threshold": "BLOCK_NONE"
-#                 },
-#                 {
-#                     "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-#                     "threshold": "BLOCK_NONE"
-#                 },
-#                 {
-#                     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-#                     "threshold": "BLOCK_NONE"
-#                 }
-#             ]
-#             config = {
-#                 "safety_settings": safety_settings_list
-#             }
-#             response = self.client.models.generate_content(
-#                 model=GENERATOR_MODEL_NAME,
-#                 contents=[prompt], # 'contents' expects a list
-#                 config=config
-#             )
-#             return response.text
-#         except Exception as e:
-#             logger.error(f"Error during answer generation: {e}")
-#             return f"An error occurred while generating the response: {e}"
-# 
-# # --- Main execution block ---
-# if __name__ == "__main__":
-#     try:
-#         agent = RAGAgent()
-#         
-#         # --- Test Query ---
-#         test_query = "What is a definitive diagnostic method for Marburg virus disease?"
-#         
-#         print(f"\nTesting agent with query: '{test_query}'\n")
-#         answer = agent.ask(test_query)
-#         
-#         print("\n--- GENERATED ANSWER ---")
-#         print(answer)
-#         print("--------------------------")
-#         
-#     except Exception as e:
-#         logger.error(f"Failed to run RAGAgent: {e}")
-
+import os
 from google import genai
 from qdrant_client import QdrantClient, models # <-- Import models
 from sentence_transformers import SentenceTransformer
@@ -189,6 +12,13 @@ from config import (
 )
 from typing import List, Dict, Any, Optional
 
+try:
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    LOCAL_LIBS_AVAILABLE = True
+except ImportError:
+    LOCAL_LIBS_AVAILABLE = False
+
 # --- Configuration ---
 EMBEDDING_MODEL_NAME = 'pritamdeka/S-BioBert-snli-multinli-stsb'
 # Using 2.5 Pro for high-quality generation
@@ -197,6 +27,13 @@ GENERATOR_MODEL_NAME = 'gemini-2.5-pro'
 FILTER_MODEL_NAME = 'gemini-2.5-flash' 
 COLLECTION_NAME = "main-rag"
 
+# --- !! NEW: MedGemma Configuration !! ---
+# Set this flag to True to use MedGemma, False to use Gemini 2.5 Pro API*****************************************
+USE_LOCAL_MEDGEMMA = False
+# Instruction-tuned MedGemma 4B model from Hugging Face
+MEDGEMMA_MODEL_NAME = 'google/medgemma-4b-it' 
+# --- !! END NEW !! ---
+
 class RAGAgent:
     def __init__(self):
         logger.info("Initializing RAGAgent")
@@ -204,6 +41,13 @@ class RAGAgent:
         self.EMBEDDING_MODEL_NAME = EMBEDDING_MODEL_NAME
         self.GENERATOR_MODEL_NAME = GENERATOR_MODEL_NAME
         self.COLLECTION_NAME = COLLECTION_NAME
+
+        # --- !!Add MedGemma config to self !! ---
+        self.use_local_medgemma = USE_LOCAL_MEDGEMMA
+        self.medgemma_model_name = MEDGEMMA_MODEL_NAME
+        self.medgemma_model = None
+        self.medgemma_tokenizer = None
+        
         
         # 1. Initialize Embedding Model (for querying)
         logger.info(f"Loading embedding model: {self.EMBEDDING_MODEL_NAME}")
@@ -236,7 +80,87 @@ class RAGAgent:
         logger.info(f"Using generator model: {GENERATOR_MODEL_NAME}")
         logger.info(f"Using filter model: {FILTER_MODEL_NAME}")
         
+        # --- !! NEW: Load local model if requested !! ---
+        if self.use_local_medgemma:
+            if LOCAL_LIBS_AVAILABLE:
+                # Short CUDA Check
+                self.gpu_available = torch.cuda.is_available()
+                if self.gpu_available:
+                    logger.info(f"CUDA GPU detected ({torch.cuda.get_device_name(0)}). MedGemma will run on GPU.")
+                else:
+                    logger.warning("--- NO GPU DETECTED ---")
+                    logger.warning("MedGemma will run on CPU. Generation will be EXTREMELY SLOW.")
+                    logger.warning("Set USE_LOCAL_MEDGEMMA = False to use the fast Gemini API.")
+                
+                # Load the local model
+                self._load_local_medgemma()
+            else:
+                logger.error("USE_LOCAL_MEDGEMMA is True, but 'transformers' or 'torch' are not installed.")
+                raise ImportError("Missing required libraries for local MedGemma inference.")
+        # --- !! END NEW !! ---
+
         logger.info("RAGAgent initialized successfully.")
+
+    # --- !! NEW: Helper function to load MedGemma !! ---
+    def _load_local_medgemma(self):
+        """
+        Loads the MedGemma model and tokenizer into memory.
+        Uses 4-bit quantization for efficiency.
+        """
+        logger.info(f"Loading local MedGemma model: {self.medgemma_model_name}...")
+        logger.warning("This may take several minutes and require significant VRAM.")
+        
+        try:
+            self.medgemma_tokenizer = AutoTokenizer.from_pretrained(
+                self.medgemma_model_name, 
+                token=HUGGINGFACETOKEN # Use token if it's a gated model
+            )
+            self.medgemma_model = AutoModelForCausalLM.from_pretrained(
+                self.medgemma_model_name,
+                torch_dtype=torch.bfloat16,
+                device_map="auto", # Automatically use GPU if available
+                quantization_config=None, # Or add bitsandbytes 4-bit config
+                token=HUGGINGFACETOKEN
+            )
+            logger.info("Local MedGemma model loaded successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load local MedGemma model: {e}")
+            raise
+
+    # --- !!Helper function to generate with MedGemma !! ---
+    def _generate_with_medgemma(self, prompt: str) -> str:
+        """
+        Generates a response using the loaded local MedGemma model.
+        """
+        # MedGemma uses a specific chat template
+        # We apply it to the prompt created by build_prompt
+        chat_prompt = [
+            {"role": "user", "content": prompt}
+        ]
+        inputs = self.medgemma_tokenizer.apply_chat_template(
+            chat_prompt, 
+            tokenize=True, 
+            add_generation_prompt=True, 
+            return_tensors="pt"
+        ).to(self.medgemma_model.device)
+
+        # Generate the output
+        output_ids = self.medgemma_model.generate(
+            inputs,
+            max_new_tokens=1500, # Max length of the answer
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.95
+        )
+        
+        # Decode the response, skipping the prompt part
+        response_text = self.medgemma_tokenizer.batch_decode(
+            output_ids[:, inputs.shape[1]:], # Only decode the new tokens
+            skip_special_tokens=True
+        )[0]
+        
+        return response_text.strip()
+    
 
     def extract_filters_from_query(self, query: str) -> Optional[models.Filter]:
        
@@ -260,7 +184,7 @@ class RAGAgent:
         """
         
         try:
-            # (THE FIX IS HERE)
+            
             # Use the config dictionary pattern from your text_chunk.py
             config_dict = {
                 "response_mime_type": "application/json"
@@ -325,7 +249,13 @@ class RAGAgent:
             [f"Source File: {doc.get('source_filename', 'N/A')}\n"
              f"Page Number: {doc.get('page_number', 'N/A')}\n"
              f"Case Diagnosis: {doc.get('disease_name_short', 'N/A')}\n"
-             f"Relevant Text Snippet: {doc.get('raw_text_chunk', 'N/A')}"
+             f"Detailed Diagnosis: {doc.get('final_diagnosis', 'N/A')}\n"
+             f"Chief Complaints: {doc.get('chief_complaint', 'N/A')}\n"
+             f"History of Present Illnesses: {doc.get('history_of_present_illness', 'N/A')}\n"
+             f"Physical Examinations: {doc.get('physical_exam', 'N/A')}\n"
+             f"Lab Diagnostics Results: {doc.get('labs_and_diagnostics', 'N/A')}\n"
+             f"Differential Diagnosis: {doc.get('differential_diagnosis', 'N/A')}\n"
+             f"Relevant Text Snippet: {doc.get('raw_text_chunk', 'N/A')}\n"
              for doc in context_docs]
         )
         
@@ -333,7 +263,7 @@ class RAGAgent:
         You are an expert clinical diagnostic assistant. Your task is to answer the user's question based *only* on the provided clinical case snippets.
         
         Pay close attention to the "Relevant Text Snippet" for each source, as this is the text that most closely matched the user's query.
-        Use the "Case Diagnosis" to understand the high-level context of the snippet.
+        Use the "Case Diagnosis" to understand the high-level context of the snippet. "Detailed Diagnosis", "Chief Complaints", "History of Present Illnesses", "Physical Examinations", "Lab Diagnostics Results", and "Differential Diagnosis" provide additional clinical context that may help in formulating your answer; with "Detailed Diagnosis" being particularly elaborative on the reasoning as to why a certain diagnosis was reached.
         
         Do not use any external knowledge. If the answer is not in the provided context, state that clearly: "I could not find an answer in the provided case reports."
         
@@ -375,52 +305,48 @@ class RAGAgent:
         # 3. Build the new, improved prompt
         prompt = self.build_prompt(query, retrieved_contexts)
         
-        # 4. Generate the answer
+
+        # --- !! Step 4 - Choose generator !! ---
         logger.info("Generating final answer from context...")
+        answer_text = ""
         try:
-            # Set safety settings as a list of dictionaries
-            safety_settings_list = [
-                {
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_HATE_SPEECH",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    "threshold": "BLOCK_NONE"
-                }
-            ]
+            if self.use_local_medgemma and self.medgemma_model:
+                # --- Generate with Local MedGemma ---
+                logger.info(f"Using local generator: {self.medgemma_model_name}")
+                answer_text = self._generate_with_medgemma(prompt)
             
-            # Create the config dictionary
-            config = {
-                "safety_settings": safety_settings_list
-            }
-            
-            response = self.client.models.generate_content(
-                model=GENERATOR_MODEL_NAME, # No "models/" prefix
-                contents=[prompt],          # contents must be a list
-                config=config
-            )
-            return response.text, context_strings
+            else:
+                # --- Generate with Gemini 2.5 Pro API ---
+                logger.info(f"Using API generator: {self.GENERATOR_MODEL_NAME}")
+                safety_settings_list = [
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                ]
+                config = {"safety_settings": safety_settings_list}
+                
+                response = self.client.models.generate_content(
+                    model=GENERATOR_MODEL_NAME, 
+                    contents=[prompt],
+                    config=config
+                )
+                answer_text = response.text
+
+            return answer_text, context_strings
         
         except Exception as e:
             logger.error(f"Error during answer generation: {e}")
             logger.debug(f"Failed prompt:\n{prompt}") 
             return f"An error occurred while generating the response: {e}", context_strings
+       
 
 # --- Main execution block ---
 if __name__ == "__main__":
     try:
         agent = RAGAgent()
         
-        query = "A patient has 5-day history of fever, generalized abdominal pain, and frontal headache. What is their most likely diagnosis?"
+        query = "What are the lab tests needed to accurately identify dengue fever?"
         
         print(f"\nTesting agent with query: '{query}'\n")
         answer, contexts = agent.ask(query)
